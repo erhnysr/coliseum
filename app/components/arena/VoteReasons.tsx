@@ -6,14 +6,25 @@ import type { ArenaSubmission } from "@/lib/contracts";
 type Props = {
   arenaAddress: `0x${string}`;
   submissions: ArenaSubmission[];
+  submissionDeadline: bigint;
+  votingDeadline: bigint;
 };
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export default function VoteReasons({ arenaAddress, submissions }: Props) {
-  const { reasons, isLoading } = useVoteReasons(arenaAddress);
+export default function VoteReasons({
+  arenaAddress,
+  submissions,
+  submissionDeadline,
+  votingDeadline,
+}: Props) {
+  const { reasons, isLoading } = useVoteReasons(
+    arenaAddress,
+    submissionDeadline,
+    votingDeadline,
+  );
 
   // Only reasons with actual text — empty (opt-out) votes are hidden here
   const withText = reasons.filter((r) => r.reason.trim().length > 0);

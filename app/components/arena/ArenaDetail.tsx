@@ -347,7 +347,12 @@ export default function ArenaDetail({ address }: Props) {
             phase={detail.phase}
             pot={detail.pot}
           />
-          <VoteReasons arenaAddress={address} submissions={detail.submissions} />
+          <VoteReasons
+            arenaAddress={address}
+            submissions={detail.submissions}
+            submissionDeadline={detail.submissionDeadline}
+            votingDeadline={detail.votingDeadline}
+          />
         </div>
 
         {/* Action sidebar */}
