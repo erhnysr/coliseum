@@ -149,7 +149,10 @@ export const ARENA_ABI = [
   },
   {
     "type": "function", "name": "vote",
-    "inputs": [{ "name": "submissionId", "type": "uint256" }],
+    "inputs": [
+      { "name": "submissionId", "type": "uint256" },
+      { "name": "reason", "type": "string" }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -181,7 +184,8 @@ export const ARENA_ABI = [
     "type": "event", "name": "Voted",
     "inputs": [
       { "name": "submissionId", "type": "uint256", "indexed": true },
-      { "name": "voter", "type": "address", "indexed": true }
+      { "name": "voter", "type": "address", "indexed": true },
+      { "name": "reason", "type": "string", "indexed": false }
     ],
     "anonymous": false
   },
@@ -230,6 +234,9 @@ export const ERC20_APPROVE_ABI = [
     "stateMutability": "view"
   }
 ] as const;
+
+// Max length of a vote reason (matches Arena.MAX_REASON_LENGTH)
+export const MAX_VOTE_REASON = 280;
 
 // Phase enum (matches Arena.sol)
 export enum ArenaPhase {

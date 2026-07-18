@@ -33,6 +33,7 @@ contract Arena {
     uint256 public constant SUBMISSION_FEE = 100_000; // 0.10 USDC
     uint256 public constant VOTE_STAKE = 50_000;      // 0.05 USDC
     uint256 public constant MAX_SUBMISSIONS = 100;
+    uint256 public constant MAX_REASON_LENGTH = 280;  // vote reason cap (tweet-length)
 
     // Prize split basis points (must sum to 10_000)
     uint256 private constant SPLIT_1ST = 6_000; // 60%
@@ -75,7 +76,8 @@ contract Arena {
     // ────────────────────────────────────────────────────────────────
 
     event SubmissionCreated(uint256 indexed id, address indexed submitter, string contentRef);
-    event Voted(uint256 indexed submissionId, address indexed voter);
+    /// @dev `reason` is event-only (never stored) — read off-chain via indexer. Empty allowed.
+    event Voted(uint256 indexed submissionId, address indexed voter, string reason);
     event Finalized(uint256 first, uint256 second, uint256 third);
     event Withdrawn(address indexed recipient, uint256 amount);
 
@@ -133,11 +135,14 @@ contract Arena {
 
     /// @notice Cast your ONE vote for this arena. Requires prior USDC approval of VOTE_STAKE.
     /// @param submissionId 0-indexed submission ID
-    function vote(uint256 submissionId) external {
+    /// @param reason Optional (may be empty) public justification for the vote. Not stored —
+    ///        emitted in the Voted event only, so gas is paid by the voter and read off-chain.
+    function vote(uint256 submissionId, string calldata reason) external {
         require(block.timestamp >= submissionDeadline, "Arena: voting not started");
         require(block.timestamp < votingDeadline, "Arena: voting phase ended");
         require(!hasVotedInArena[msg.sender], "Arena: already voted");
         require(submissionId < _submissions.length, "Arena: invalid submission");
+        require(bytes(reason).length <= MAX_REASON_LENGTH, "Arena: reason too long");
 
         usdc.safeTransferFrom(msg.sender, address(this), VOTE_STAKE);
 
@@ -145,7 +150,7 @@ contract Arena {
         hasVotedInArena[msg.sender] = true;
         voterChoice[msg.sender] = submissionId;
 
-        emit Voted(submissionId, msg.sender);
+        emit Voted(submissionId, msg.sender, reason);
     }
 
     /// @notice Finalize the arena after votingDeadline. Anyone may call.

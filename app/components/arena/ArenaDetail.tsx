@@ -4,10 +4,11 @@ import { useArena, canSubmit, canVote } from "@/hooks/useArena";
 import { ArenaPhase } from "@/lib/contracts";
 import { formatUsdc, USDC_ADDRESS, SUBMISSION_FEE, VOTE_STAKE } from "@/lib/usdc";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { ARENA_ABI, ERC20_APPROVE_ABI } from "@/lib/contracts";
+import { ARENA_ABI, ERC20_APPROVE_ABI, MAX_VOTE_REASON } from "@/lib/contracts";
 import { useState } from "react";
 import PhaseTimer from "./PhaseTimer";
 import Leaderboard from "./Leaderboard";
+import VoteReasons from "./VoteReasons";
 import TxStatus from "@/components/ui/TxStatus";
 
 type Props = { address: `0x${string}` };
@@ -116,6 +117,7 @@ function SubmitPanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; de
 function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; detail: NonNullable<ReturnType<typeof useArena>["detail"]> }) {
   const { isConnected } = useAccount();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [voteReason, setVoteReason] = useState("");
   const { ok, reason } = canVote(detail, isConnected);
 
   const { writeContract: approve, data: approveTxHash, isPending: approvePending } = useWriteContract();
@@ -143,7 +145,7 @@ function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; deta
       address: arenaAddress,
       abi: ARENA_ABI,
       functionName: "vote",
-      args: [BigInt(selectedId)],
+      args: [BigInt(selectedId), voteReason.trim()],
     });
   }
 
@@ -177,6 +179,20 @@ function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; deta
                 </div>
               </label>
             ))}
+          </div>
+
+          <div>
+            <textarea
+              placeholder="Why this entry? (optional, public — recorded on-chain)"
+              value={voteReason}
+              onChange={(e) => setVoteReason(e.target.value.slice(0, MAX_VOTE_REASON))}
+              rows={2}
+              maxLength={MAX_VOTE_REASON}
+              className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 placeholder-gray-600 focus:outline-none focus:border-indigo-500 resize-none"
+            />
+            <p className="text-gray-600 text-[11px] text-right mt-1">
+              {voteReason.length}/{MAX_VOTE_REASON}
+            </p>
           </div>
 
           <p className="text-gray-500 text-xs">Stake: 0.05 USDC — rebated if winner</p>
@@ -331,6 +347,7 @@ export default function ArenaDetail({ address }: Props) {
             phase={detail.phase}
             pot={detail.pot}
           />
+          <VoteReasons arenaAddress={address} submissions={detail.submissions} />
         </div>
 
         {/* Action sidebar */}
