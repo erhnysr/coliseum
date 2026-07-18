@@ -39,6 +39,9 @@ contract ArenaTest is Test {
     uint256 internal subDeadline;
     uint256 internal voteDeadline;
 
+    // Redeclared for vm.expectEmit (must match Arena.Voted exactly)
+    event Voted(uint256 indexed submissionId, address indexed voter, string reason);
+
     function setUp() public {
         usdc = new MockUSDC();
 
@@ -146,7 +149,7 @@ contract ArenaTest is Test {
         vm.prank(carol);
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
-        arena.vote(0);
+        arena.vote(0, "");
 
         assertTrue(arena.hasVotedInArena(carol));
         assertEq(arena.voterChoice(carol), 0);
@@ -164,7 +167,7 @@ contract ArenaTest is Test {
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
         vm.expectRevert("Arena: voting not started");
-        arena.vote(0);
+        arena.vote(0, "");
     }
 
     function test_vote_afterDeadline_reverts() public {
@@ -174,7 +177,7 @@ contract ArenaTest is Test {
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
         vm.expectRevert("Arena: voting phase ended");
-        arena.vote(0);
+        arena.vote(0, "");
     }
 
     function test_vote_twice_reverts() public {
@@ -182,10 +185,10 @@ contract ArenaTest is Test {
         vm.prank(carol);
         usdc.approve(address(arena), VOTE_STAKE * 2);
         vm.prank(carol);
-        arena.vote(0);
+        arena.vote(0, "");
         vm.prank(carol);
         vm.expectRevert("Arena: already voted");
-        arena.vote(1);
+        arena.vote(1, "");
     }
 
     function test_vote_invalidSubmission_reverts() public {
@@ -194,7 +197,57 @@ contract ArenaTest is Test {
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
         vm.expectRevert("Arena: invalid submission");
-        arena.vote(99);
+        arena.vote(99, "");
+    }
+
+    function test_vote_emitsReason() public {
+        _setupSubmissions();
+        vm.prank(carol);
+        usdc.approve(address(arena), VOTE_STAKE);
+
+        vm.expectEmit(true, true, false, true, address(arena));
+        emit Voted(0, carol, "clean concept, best execution");
+
+        vm.prank(carol);
+        arena.vote(0, "clean concept, best execution");
+    }
+
+    function test_vote_emptyReason_ok() public {
+        _setupSubmissions();
+        vm.prank(carol);
+        usdc.approve(address(arena), VOTE_STAKE);
+
+        vm.expectEmit(true, true, false, true, address(arena));
+        emit Voted(0, carol, "");
+
+        vm.prank(carol);
+        arena.vote(0, ""); // empty reason is allowed
+
+        assertEq(arena.voterChoice(carol), 0);
+        assertEq(arena.getSubmission(0).votes, 1);
+    }
+
+    function test_vote_reasonTooLong_reverts() public {
+        _setupSubmissions();
+        vm.prank(carol);
+        usdc.approve(address(arena), VOTE_STAKE);
+
+        string memory tooLong = new string(281); // 281 bytes > MAX_REASON_LENGTH (280)
+        vm.prank(carol);
+        vm.expectRevert("Arena: reason too long");
+        arena.vote(0, tooLong);
+    }
+
+    function test_vote_reasonAtMaxLength_ok() public {
+        _setupSubmissions();
+        vm.prank(carol);
+        usdc.approve(address(arena), VOTE_STAKE);
+
+        string memory maxLen = new string(280); // exactly MAX_REASON_LENGTH
+        vm.prank(carol);
+        arena.vote(0, maxLen);
+
+        assertTrue(arena.hasVotedInArena(carol));
     }
 
     // ── finalize ──────────────────────────────────────────────────
@@ -206,14 +259,14 @@ contract ArenaTest is Test {
         vm.prank(carol);
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
-        arena.vote(0);
+        arena.vote(0, "");
 
         vm.prank(owner);
         usdc.mint(owner, 10_000_000);
         vm.prank(owner);
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(owner);
-        arena.vote(0);
+        arena.vote(0, "");
 
         vm.warp(voteDeadline + 1);
     }
@@ -343,14 +396,14 @@ contract ArenaTest is Test {
         vm.prank(carol);
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
-        arena.vote(0); // carol votes for alice
+        arena.vote(0, ""); // carol votes for alice
 
         address dave = address(0xD);
         usdc.mint(dave, 10_000_000);
         vm.prank(dave);
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(dave);
-        arena.vote(1); // dave votes for bob
+        arena.vote(1, ""); // dave votes for bob
 
         vm.warp(voteDeadline + 1);
         arena.finalize();
@@ -386,7 +439,7 @@ contract ArenaTest is Test {
         vm.prank(carol);
         usdc.approve(address(arena), VOTE_STAKE);
         vm.prank(carol);
-        arena.vote(0); // alice gets 1 vote
+        arena.vote(0, ""); // alice gets 1 vote
 
         vm.warp(voteDeadline + 1);
         uint256 pot = arena.getPot();
@@ -420,16 +473,16 @@ contract ArenaTest is Test {
         for (uint i = 0; i < 3; i++) {
             usdc.mint(voters[i], 10_000_000);
             vm.prank(voters[i]); usdc.approve(address(arena), VOTE_STAKE);
-            vm.prank(voters[i]); arena.vote(0); // vote for alice
+            vm.prank(voters[i]); arena.vote(0, ""); // vote for alice
         }
         address[2] memory voters2 = [address(0x23), address(0x24)];
         for (uint i = 0; i < 2; i++) {
             usdc.mint(voters2[i], 10_000_000);
             vm.prank(voters2[i]); usdc.approve(address(arena), VOTE_STAKE);
-            vm.prank(voters2[i]); arena.vote(1); // vote for bob
+            vm.prank(voters2[i]); arena.vote(1, ""); // vote for bob
         }
         vm.prank(eve); usdc.approve(address(arena), VOTE_STAKE);
-        vm.prank(eve); arena.vote(2); // vote for carol
+        vm.prank(eve); arena.vote(2, ""); // vote for carol
 
         vm.warp(voteDeadline + 1);
         uint256 pot = arena.getPot();
@@ -458,7 +511,7 @@ contract ArenaTest is Test {
 
         vm.warp(subDeadline + 1);
         vm.prank(eve); usdc.approve(address(arena), VOTE_STAKE);
-        vm.prank(eve); arena.vote(0);
+        vm.prank(eve); arena.vote(0, "");
 
         vm.warp(voteDeadline + 1);
         uint256 pot = arena.getPot();
@@ -486,7 +539,7 @@ contract ArenaTest is Test {
 
         vm.warp(subDeadline + 1);
         vm.prank(carol); usdc.approve(address(arena), VOTE_STAKE);
-        vm.prank(carol); arena.vote(0);
+        vm.prank(carol); arena.vote(0, "");
         assertEq(arena.getPot(), initialPot + SUBMISSION_FEE * 2 + VOTE_STAKE);
     }
 
@@ -525,9 +578,9 @@ contract ArenaTest is Test {
         usdc.mint(dave, 10_000_000);
 
         vm.prank(carol); usdc.approve(address(arena), VOTE_STAKE * 2);
-        vm.prank(carol); arena.vote(0); // carol → alice (will win with 1 vote vs 0)
+        vm.prank(carol); arena.vote(0, ""); // carol → alice (will win with 1 vote vs 0)
         vm.prank(dave);  usdc.approve(address(arena), VOTE_STAKE);
-        vm.prank(dave);  arena.vote(1); // dave → bob (loser)
+        vm.prank(dave);  arena.vote(1, ""); // dave → bob (loser)
 
         vm.warp(voteDeadline + 1);
         arena.finalize();
@@ -542,7 +595,7 @@ contract ArenaTest is Test {
     function test_claimVoterRebate_beforeFinalize_reverts() public {
         _setupSubmissions();
         vm.prank(carol); usdc.approve(address(arena), VOTE_STAKE);
-        vm.prank(carol); arena.vote(0);
+        vm.prank(carol); arena.vote(0, "");
         vm.warp(voteDeadline + 1);
         // NOT finalized yet
         vm.prank(carol);
@@ -577,7 +630,7 @@ contract ArenaTest is Test {
         _setupSubmissions(); // alice id=0, bob id=1
         // alice votes for bob (she can)
         vm.prank(alice); usdc.approve(address(arena), VOTE_STAKE);
-        vm.prank(alice); arena.vote(1);
+        vm.prank(alice); arena.vote(1, "");
         assertTrue(arena.hasVotedInArena(alice));
     }
 

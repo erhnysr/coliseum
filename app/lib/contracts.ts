@@ -1,5 +1,5 @@
-export const ARENA_FACTORY_ADDRESS = "0x13a38e7C2bA5AFA76a1AC21Eaef9f4DEA293FEBe" as `0x${string}`;
-export const REPUTATION_NFT_ADDRESS = "0x953f508CdC9DC4FaA17D898a5e65A91a262F6607" as `0x${string}`;
+export const ARENA_FACTORY_ADDRESS = "0xAA4FdEfE93e1DB47D05a0CBe97DB5efb176FFbDF" as `0x${string}`;
+export const REPUTATION_NFT_ADDRESS = "0x6E06F85438d7e323089E75a75CE0d6850537C0F6" as `0x${string}`;
 
 export const ARENA_FACTORY_ABI = [
   {
@@ -149,7 +149,10 @@ export const ARENA_ABI = [
   },
   {
     "type": "function", "name": "vote",
-    "inputs": [{ "name": "submissionId", "type": "uint256" }],
+    "inputs": [
+      { "name": "submissionId", "type": "uint256" },
+      { "name": "reason", "type": "string" }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -181,7 +184,8 @@ export const ARENA_ABI = [
     "type": "event", "name": "Voted",
     "inputs": [
       { "name": "submissionId", "type": "uint256", "indexed": true },
-      { "name": "voter", "type": "address", "indexed": true }
+      { "name": "voter", "type": "address", "indexed": true },
+      { "name": "reason", "type": "string", "indexed": false }
     ],
     "anonymous": false
   },
@@ -230,6 +234,9 @@ export const ERC20_APPROVE_ABI = [
     "stateMutability": "view"
   }
 ] as const;
+
+// Max length of a vote reason (matches Arena.MAX_REASON_LENGTH)
+export const MAX_VOTE_REASON = 280;
 
 // Phase enum (matches Arena.sol)
 export enum ArenaPhase {

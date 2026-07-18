@@ -7,8 +7,8 @@ A public judging market protocol on Arc Testnet. Anyone opens an "arena" around 
 A $0.05 vote stake is economically impossible anywhere else — Ethereum gas eats it, Stripe's $0.30 minimum kills it, Solana means holding price risk. Arc's USDC-as-gas + sub-cent fees make micro-stake voting viable for the first time.
 
 ## Deployed contracts (Arc Testnet, Chain ID 5042002)
-- ArenaFactory: 0x13a38e7C2bA5AFA76a1AC21Eaef9f4DEA293FEBe
-- ReputationNFT: 0x953f508CdC9DC4FaA17D898a5e65A91a262F6607
+- ArenaFactory: 0xAA4FdEfE93e1DB47D05a0CBe97DB5efb176FFbDF
+- ReputationNFT: 0x6E06F85438d7e323089E75a75CE0d6850537C0F6
 - USDC (ERC-20, 6 decimals): 0x3600000000000000000000000000000000000000
 - RPC: https://rpc.testnet.arc.network
 - Explorer: https://testnet.arcscan.app
