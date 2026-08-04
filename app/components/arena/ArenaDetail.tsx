@@ -12,6 +12,7 @@ import VoteReasons from "./VoteReasons";
 import TxStatus from "@/components/ui/TxStatus";
 
 type Props = { address: `0x${string}` };
+type Detail = NonNullable<ReturnType<typeof useArena>["detail"]>;
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -26,109 +27,69 @@ function resolvePhase(phase: ArenaPhase, subDeadline: bigint, voteDeadline: bigi
   return phase;
 }
 
-const PHASE_BADGE: Record<ArenaPhase, { label: string; cls: string }> = {
-  [ArenaPhase.Submission]: { label: "Submissions Open", cls: "bg-emerald-900/40 text-emerald-400 border-emerald-800/50" },
-  [ArenaPhase.Voting]:     { label: "Voting Live",       cls: "bg-indigo-900/40 text-indigo-400 border-indigo-800/50" },
-  [ArenaPhase.Ended]:      { label: "Ended",             cls: "bg-gray-800/60 text-gray-500 border-gray-700/50" },
+const ROUND_LABEL: Record<ArenaPhase, string> = {
+  [ArenaPhase.Submission]: "Round II of IV",
+  [ArenaPhase.Voting]: "Round III of IV",
+  [ArenaPhase.Ended]: "Round IV of IV",
 };
 
-// ── Submit flow ──────────────────────────────────────────────────
-function SubmitPanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; detail: NonNullable<ReturnType<typeof useArena>["detail"]> }) {
-  const { isConnected } = useAccount();
-  const [contentRef, setContentRef] = useState("");
-  const { ok, reason } = canSubmit(detail, isConnected);
-
-  const { writeContract: approve, data: approveTxHash, isPending: approvePending } = useWriteContract();
-  const { writeContract: submit, data: submitTxHash, isPending: submitPending } = useWriteContract();
-
-  const { isLoading: approveConfirming, isSuccess: approveConfirmed } =
-    useWaitForTransactionReceipt({ hash: approveTxHash });
-  const { isLoading: submitConfirming, isSuccess: submitConfirmed } =
-    useWaitForTransactionReceipt({ hash: submitTxHash });
-
-  const needsApprove = detail.usdcAllowance < SUBMISSION_FEE;
-
-  function handleApprove() {
-    approve({
-      address: USDC_ADDRESS,
-      abi: ERC20_APPROVE_ABI,
-      functionName: "approve",
-      args: [arenaAddress, SUBMISSION_FEE],
-    });
+// ── Hero phase pill ──────────────────────────────────────────────
+function PhasePill({ phase, sealed }: { phase: ArenaPhase; sealed: boolean }) {
+  if (sealed) {
+    return (
+      <span className="font-mono text-xs uppercase tracking-[0.18em] text-accent-secondary bg-accent-secondary/10 rounded-full px-3 py-1">
+        Sealed
+      </span>
+    );
   }
-
-  function handleSubmit() {
-    if (!contentRef.trim()) return;
-    submit({
-      address: arenaAddress,
-      abi: ARENA_ABI,
-      functionName: "submit",
-      args: [contentRef.trim()],
-    });
-  }
-
+  const map: Record<ArenaPhase, { label: string; live?: boolean }> = {
+    [ArenaPhase.Submission]: { label: "Submission" },
+    [ArenaPhase.Voting]: { label: "Voting", live: true },
+    [ArenaPhase.Ended]: { label: "Ended" },
+  };
+  const { label, live } = map[phase];
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <h3 className="text-white font-bold mb-4">Submit Entry</h3>
-      {!ok ? (
-        <p className="text-gray-500 text-sm">{reason}</p>
-      ) : (
-        <div className="space-y-3">
-          <input
-            type="text"
-            placeholder="IPFS hash or URL (e.g. ipfs://Qm…)"
-            value={contentRef}
-            onChange={(e) => setContentRef(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 placeholder-gray-600 focus:outline-none focus:border-indigo-500"
-          />
-          <p className="text-gray-500 text-xs">Fee: 0.10 USDC → added to prize pool</p>
+    <span className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-accent bg-accent-tint rounded-full px-3 py-1">
+      {live && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+      {label}
+    </span>
+  );
+}
 
-          {needsApprove && !approveConfirmed ? (
-            <button
-              onClick={handleApprove}
-              disabled={approvePending || approveConfirming}
-              className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
-            >
-              {approvePending || approveConfirming ? "Approving…" : "1. Approve 0.10 USDC"}
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={submitPending || submitConfirming || !contentRef.trim()}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
-            >
-              {submitPending || submitConfirming ? "Submitting…" : "Submit Entry"}
-            </button>
-          )}
-
-          <TxStatus
-            hash={approveTxHash ?? submitTxHash}
-            isPending={approvePending || submitPending}
-            isConfirming={approveConfirming || submitConfirming}
-            isConfirmed={submitConfirmed}
-          />
-        </div>
-      )}
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-6 py-5">
+      <div className="font-mono text-xs uppercase tracking-[0.15em] text-text/45 mb-2">{label}</div>
+      <div className="text-lg font-medium text-text tabular-nums">{value}</div>
     </div>
   );
 }
 
-// ── Vote flow ────────────────────────────────────────────────────
-function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; detail: NonNullable<ReturnType<typeof useArena>["detail"]> }) {
+// ── Inline vote confirmation (voting phase, per-entry) ───────────
+function VoteConfirm({
+  arenaAddress,
+  detail,
+  selectedId,
+  onClose,
+}: {
+  arenaAddress: `0x${string}`;
+  detail: Detail;
+  selectedId: number;
+  onClose: () => void;
+}) {
   const { isConnected } = useAccount();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [voteReason, setVoteReason] = useState("");
   const { ok, reason } = canVote(detail, isConnected);
 
   const { writeContract: approve, data: approveTxHash, isPending: approvePending } = useWriteContract();
   const { writeContract: vote, data: voteTxHash, isPending: votePending } = useWriteContract();
-
   const { isLoading: approveConfirming, isSuccess: approveConfirmed } =
     useWaitForTransactionReceipt({ hash: approveTxHash });
   const { isLoading: voteConfirming, isSuccess: voteConfirmed } =
     useWaitForTransactionReceipt({ hash: voteTxHash });
 
   const needsApprove = detail.usdcAllowance < VOTE_STAKE;
+  const target = detail.submissions[selectedId];
 
   function handleApprove() {
     approve({
@@ -140,7 +101,6 @@ function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; deta
   }
 
   function handleVote() {
-    if (selectedId === null) return;
     vote({
       address: arenaAddress,
       abi: ARENA_ABI,
@@ -150,68 +110,51 @@ function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; deta
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <h3 className="text-white font-bold mb-4">Cast Your Vote</h3>
+    <div className="rounded-2xl border border-accent/40 bg-surface p-6">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="min-w-0">
+          <h3 className="font-display text-xl font-semibold text-text">Cast your vote</h3>
+          <p className="text-text/55 text-sm mt-0.5 truncate">
+            Entry #{selectedId + 1} · {target ? target.contentRef : ""}
+          </p>
+        </div>
+        <button onClick={onClose} className="text-text/40 hover:text-text text-sm">
+          Change
+        </button>
+      </div>
+
       {!ok ? (
-        <p className="text-gray-500 text-sm">{reason}</p>
+        <p className="text-text/55 text-sm">{reason}</p>
       ) : (
         <div className="space-y-3">
-          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-            {detail.submissions.map((s, i) => (
-              <label
-                key={i}
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                  selectedId === i
-                    ? "border-indigo-500 bg-indigo-900/20"
-                    : "border-gray-700 hover:border-gray-600"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="vote"
-                  checked={selectedId === i}
-                  onChange={() => setSelectedId(i)}
-                  className="mt-0.5 accent-indigo-500"
-                />
-                <div className="min-w-0">
-                  <p className="text-gray-400 text-xs font-mono">{shortAddr(s.submitter)}</p>
-                  <p className="text-white text-sm break-all">{s.contentRef}</p>
-                </div>
-              </label>
-            ))}
+          <textarea
+            placeholder="Why this entry? (optional, public — recorded on-chain)"
+            value={voteReason}
+            onChange={(e) => setVoteReason(e.target.value.slice(0, MAX_VOTE_REASON))}
+            rows={2}
+            maxLength={MAX_VOTE_REASON}
+            className="w-full bg-bg border border-muted text-text text-sm rounded-xl px-4 py-3 placeholder-text/40 focus:outline-none focus:border-accent resize-none"
+          />
+          <div className="flex items-center justify-between">
+            <p className="text-text/50 text-xs">Stake: 0.05 USDC — rebated if winner</p>
+            <p className="text-text/40 text-[11px]">{voteReason.length}/{MAX_VOTE_REASON}</p>
           </div>
-
-          <div>
-            <textarea
-              placeholder="Why this entry? (optional, public — recorded on-chain)"
-              value={voteReason}
-              onChange={(e) => setVoteReason(e.target.value.slice(0, MAX_VOTE_REASON))}
-              rows={2}
-              maxLength={MAX_VOTE_REASON}
-              className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 placeholder-gray-600 focus:outline-none focus:border-indigo-500 resize-none"
-            />
-            <p className="text-gray-600 text-[11px] text-right mt-1">
-              {voteReason.length}/{MAX_VOTE_REASON}
-            </p>
-          </div>
-
-          <p className="text-gray-500 text-xs">Stake: 0.05 USDC — rebated if winner</p>
 
           {needsApprove && !approveConfirmed ? (
             <button
               onClick={handleApprove}
               disabled={approvePending || approveConfirming}
-              className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+              className="w-full bg-accent-secondary hover:opacity-90 disabled:opacity-50 text-surface font-semibold py-3 rounded-xl text-sm transition-colors"
             >
               {approvePending || approveConfirming ? "Approving…" : "1. Approve 0.05 USDC"}
             </button>
           ) : (
             <button
               onClick={handleVote}
-              disabled={votePending || voteConfirming || selectedId === null}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+              disabled={votePending || voteConfirming}
+              className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 text-surface font-semibold py-3 rounded-xl text-sm transition-colors"
             >
-              {votePending || voteConfirming ? "Voting…" : "Cast Vote"}
+              {votePending || voteConfirming ? "Voting…" : "Cast vote"}
             </button>
           )}
 
@@ -227,58 +170,218 @@ function VotePanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; deta
   );
 }
 
-// ── Finalize + Withdraw ──────────────────────────────────────────
-function ActionPanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; detail: NonNullable<ReturnType<typeof useArena>["detail"]> }) {
+// ── Sidebar: Your Position (stats + contextual primary action) ───
+function YourPosition({ arenaAddress, detail }: { arenaAddress: `0x${string}`; detail: Detail }) {
   const { isConnected } = useAccount();
-  const { writeContract, data: txHash, isPending } = useWriteContract();
-  const { isLoading: confirming, isSuccess: confirmed } = useWaitForTransactionReceipt({ hash: txHash });
+  const phase = resolvePhase(detail.phase, detail.submissionDeadline, detail.votingDeadline);
 
+  const [contentRef, setContentRef] = useState("");
+  const submitOk = canSubmit(detail, isConnected);
+
+  const { writeContract: approve, data: approveTxHash, isPending: approvePending } = useWriteContract();
+  const { writeContract: submit, data: submitTxHash, isPending: submitPending } = useWriteContract();
+  const { writeContract: action, data: actionTxHash, isPending: actionPending } = useWriteContract();
+
+  const { isLoading: approveConfirming, isSuccess: approveConfirmed } =
+    useWaitForTransactionReceipt({ hash: approveTxHash });
+  const { isLoading: submitConfirming, isSuccess: submitConfirmed } =
+    useWaitForTransactionReceipt({ hash: submitTxHash });
+  const { isLoading: actionConfirming, isSuccess: actionConfirmed } =
+    useWaitForTransactionReceipt({ hash: actionTxHash });
+
+  const needsApprove = detail.usdcAllowance < SUBMISSION_FEE;
   const canFinalize = detail.phase === ArenaPhase.Ended && !detail.finalized && isConnected;
   const canWithdraw = detail.finalized && detail.pendingWithdraw > 0n && isConnected;
 
-  if (!canFinalize && !canWithdraw) return null;
+  const feesPaid =
+    (detail.hasSubmitted ? SUBMISSION_FEE : 0n) + (detail.hasVoted ? VOTE_STAKE : 0n);
 
-  function handleFinalize() {
-    writeContract({ address: arenaAddress, abi: ARENA_ABI, functionName: "finalize" });
-  }
-
-  function handleWithdraw() {
-    writeContract({ address: arenaAddress, abi: ARENA_ABI, functionName: "withdraw" });
-  }
+  const rows: { label: string; value: string; tone?: "accent" | "oxblood" }[] = [
+    { label: "Fees paid", value: isConnected ? `${formatUsdc(feesPaid)} USDC` : "— USDC" },
+    { label: "Entries submitted", value: isConnected ? (detail.hasSubmitted ? "1" : "0") : "—" },
+    {
+      label: "Vote cast",
+      value: detail.hasVoted ? "cast" : "not cast",
+      tone: detail.hasVoted ? "accent" : "oxblood",
+    },
+  ];
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      {canWithdraw && (
+    <div className="rounded-2xl border border-muted/70 bg-surface p-6">
+      <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-text/45 mb-5">Your Position</h2>
+
+      <div className="border border-muted/60 rounded-xl divide-y divide-muted/60 mb-5">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between px-4 py-3.5">
+            <span className="text-text/80 text-sm">{r.label}</span>
+            <span
+              className={`text-sm font-medium ${
+                r.tone === "oxblood"
+                  ? "text-accent-secondary font-mono"
+                  : r.tone === "accent"
+                    ? "text-accent font-mono"
+                    : "text-text"
+              }`}
+            >
+              {r.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Contextual primary action */}
+      {canWithdraw ? (
         <>
-          <h3 className="text-white font-bold mb-1">Claim Winnings</h3>
-          <p className="text-gray-400 text-sm mb-4">
-            You have <span className="text-green-400 font-semibold">{formatUsdc(detail.pendingWithdraw)} USDC</span> pending.
+          <p className="text-text/70 text-sm mb-3">
+            You have{" "}
+            <span className="text-accent font-semibold">{formatUsdc(detail.pendingWithdraw)} USDC</span>{" "}
+            pending.
           </p>
           <button
-            onClick={handleWithdraw}
-            disabled={isPending || confirming}
-            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+            onClick={() => action({ address: arenaAddress, abi: ARENA_ABI, functionName: "withdraw" })}
+            disabled={actionPending || actionConfirming}
+            className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 text-surface font-semibold py-3.5 rounded-xl text-sm transition-colors"
           >
-            {isPending || confirming ? "Withdrawing…" : "Withdraw"}
+            {actionPending || actionConfirming ? "Withdrawing…" : "Withdraw winnings"}
           </button>
+          <TxStatus hash={actionTxHash} isPending={actionPending} isConfirming={actionConfirming} isConfirmed={actionConfirmed} />
         </>
-      )}
-      {canFinalize && (
+      ) : canFinalize ? (
         <>
-          <h3 className="text-white font-bold mb-2">Finalize Arena</h3>
-          <p className="text-gray-400 text-sm mb-4">
-            Voting ended. Finalize to distribute prizes and mint NFTs.
-          </p>
+          <p className="text-text/60 text-sm mb-3">Voting ended. Finalize to seal the verdict and distribute prizes.</p>
           <button
-            onClick={handleFinalize}
-            disabled={isPending || confirming}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+            onClick={() => action({ address: arenaAddress, abi: ARENA_ABI, functionName: "finalize" })}
+            disabled={actionPending || actionConfirming}
+            className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 text-surface font-semibold py-3.5 rounded-xl text-sm transition-colors"
           >
-            {isPending || confirming ? "Finalizing…" : "Finalize Arena"}
+            {actionPending || actionConfirming ? "Finalizing…" : "Finalize arena"}
           </button>
+          <TxStatus hash={actionTxHash} isPending={actionPending} isConfirming={actionConfirming} isConfirmed={actionConfirmed} />
         </>
+      ) : phase === ArenaPhase.Submission ? (
+        submitOk.ok ? (
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="IPFS hash or URL (e.g. ipfs://Qm…)"
+              value={contentRef}
+              onChange={(e) => setContentRef(e.target.value)}
+              className="w-full bg-bg border border-muted text-text text-sm rounded-xl px-4 py-3 placeholder-text/40 focus:outline-none focus:border-accent"
+            />
+            <p className="text-text/50 text-xs">Fee: 0.10 USDC → added to prize pool</p>
+            {needsApprove && !approveConfirmed ? (
+              <button
+                onClick={() =>
+                  approve({ address: USDC_ADDRESS, abi: ERC20_APPROVE_ABI, functionName: "approve", args: [arenaAddress, SUBMISSION_FEE] })
+                }
+                disabled={approvePending || approveConfirming}
+                className="w-full bg-accent-secondary hover:opacity-90 disabled:opacity-50 text-surface font-semibold py-3.5 rounded-xl text-sm transition-colors"
+              >
+                {approvePending || approveConfirming ? "Approving…" : "1. Approve 0.10 USDC"}
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  if (!contentRef.trim()) return;
+                  submit({ address: arenaAddress, abi: ARENA_ABI, functionName: "submit", args: [contentRef.trim()] });
+                }}
+                disabled={submitPending || submitConfirming || !contentRef.trim()}
+                className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 text-surface font-semibold py-3.5 rounded-xl text-sm transition-colors"
+              >
+                {submitPending || submitConfirming ? "Submitting…" : "Submit entry"}
+              </button>
+            )}
+            <TxStatus
+              hash={approveTxHash ?? submitTxHash}
+              isPending={approvePending || submitPending}
+              isConfirming={approveConfirming || submitConfirming}
+              isConfirmed={submitConfirmed}
+            />
+          </div>
+        ) : (
+          <div className="w-full text-center border border-muted/70 rounded-xl py-3.5 font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+            {submitOk.reason}
+          </div>
+        )
+      ) : (
+        <div className="w-full text-center border border-muted/70 rounded-xl py-3.5 font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+          {detail.finalized ? "Verdict Sealed" : phase === ArenaPhase.Voting ? "Submissions Closed" : "Voting Closed"}
+        </div>
       )}
-      <TxStatus hash={txHash} isPending={isPending} isConfirming={confirming} isConfirmed={confirmed} />
+
+      <p className="text-text/45 text-xs leading-relaxed mt-4">
+        Submission fees and vote stakes are held by the arena contract and paid out only once the
+        verdict is finalized.
+      </p>
+    </div>
+  );
+}
+
+// ── Sidebar: Rules ───────────────────────────────────────────────
+function RulesBox({ detail }: { detail: Detail }) {
+  const phase = resolvePhase(detail.phase, detail.submissionDeadline, detail.votingDeadline);
+  const totalVotes = detail.submissions.reduce((acc, s) => acc + s.votes, 0n);
+  const PHASE_TEXT: Record<ArenaPhase, string> = {
+    [ArenaPhase.Submission]: "Submission",
+    [ArenaPhase.Voting]: "Voting",
+    [ArenaPhase.Ended]: detail.finalized ? "Sealed" : "Ended",
+  };
+  const rows = [
+    { label: "Submission fee", value: `${formatUsdc(SUBMISSION_FEE)} USDC` },
+    { label: "Vote stake", value: `${formatUsdc(VOTE_STAKE)} USDC` },
+    { label: "Submissions", value: detail.submissionCount.toString() },
+    { label: "Votes cast", value: totalVotes.toString() },
+    { label: "Phase", value: PHASE_TEXT[phase] },
+  ];
+  return (
+    <div className="rounded-2xl border border-muted/70 bg-surface p-6">
+      <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-text/45 mb-5">Rules</h2>
+      <div className="divide-y divide-muted/50">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between py-3">
+            <span className="text-text/70 text-sm">{r.label}</span>
+            <span className="text-text text-sm font-medium tabular-nums">{r.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Sidebar: Contract ────────────────────────────────────────────
+function ContractBox({ address }: { address: `0x${string}` }) {
+  return (
+    <div className="rounded-2xl border border-muted/70 bg-surface p-6">
+      <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-text/45 mb-4">Contract</h2>
+      <p className="font-mono text-xs text-text/70 break-all mb-4">{address}</p>
+      <a
+        href={`https://testnet.arcscan.app/address/${address}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-xs uppercase tracking-[0.15em] text-accent hover:text-accent-light"
+      >
+        View on Explorer →
+      </a>
+    </div>
+  );
+}
+
+// ── How votes are counted (static explainer) ─────────────────────
+function HowVotesCounted() {
+  return (
+    <div className="rounded-2xl border border-muted/70 bg-surface p-8">
+      <h2 className="font-display text-2xl font-semibold text-text mb-3">How votes are counted</h2>
+      <p className="text-text/65 text-sm leading-relaxed max-w-xl mb-5">
+        Each vote costs a fixed stake and adds one to a submission&apos;s tally. The share shown on
+        every entry is simply its votes over all votes cast in this arena.
+      </p>
+      <div className="rounded-xl bg-bg border border-muted/60 px-5 py-4 font-mono text-sm text-text">
+        share = votes / Σ votes
+      </div>
+      <p className="text-text/45 text-xs leading-relaxed mt-5">
+        Reputation-weighted voting is a proposed mechanism for a later version. This contract does
+        not implement it.
+      </p>
     </div>
   );
 }
@@ -286,85 +389,110 @@ function ActionPanel({ arenaAddress, detail }: { arenaAddress: `0x${string}`; de
 // ── Main component ───────────────────────────────────────────────
 export default function ArenaDetail({ address }: Props) {
   const { detail, isLoading } = useArena(address);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   if (isLoading) {
     return (
-      <div className="animate-pulse space-y-6">
-        <div className="h-10 w-2/3 bg-gray-800 rounded-xl" />
-        <div className="h-32 bg-gray-800 rounded-2xl" />
-        <div className="h-64 bg-gray-800 rounded-2xl" />
+      <div className="animate-pulse grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="h-64 bg-muted/40 rounded-2xl" />
+          <div className="h-40 bg-muted/40 rounded-2xl" />
+        </div>
+        <div className="h-80 bg-muted/40 rounded-2xl" />
       </div>
     );
   }
 
   if (!detail) {
-    return <p className="text-gray-500 text-sm">Arena not found or not yet deployed.</p>;
+    return <p className="text-text/50 text-sm">Arena not found or not yet deployed.</p>;
   }
 
   const phase = resolvePhase(detail.phase, detail.submissionDeadline, detail.votingDeadline);
-  const badge = PHASE_BADGE[phase];
+  const sealed = detail.finalized;
+  const totalVotes = detail.submissions.reduce((acc, s) => acc + s.votes, 0n);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full border mb-3 ${badge.cls}`}>
-          {phase === ArenaPhase.Voting && (
-            <span className="relative flex h-1.5 w-1.5 mr-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-400" />
+    <div className="grid lg:grid-cols-3 gap-6 items-start">
+      {/* LEFT */}
+      <div className="lg:col-span-2 space-y-6">
+        {/* Hero */}
+        <div className="rounded-2xl border border-muted/70 bg-surface p-8">
+          <div className="flex items-center gap-4 mb-5">
+            <PhasePill phase={phase} sealed={sealed} />
+            <span className="font-mono text-xs uppercase tracking-[0.18em] text-text/45">
+              {ROUND_LABEL[phase]}
             </span>
-          )}
-          {badge.label}
-        </span>
-        <h1 className="text-4xl font-black text-white leading-tight mb-2">{detail.topic}</h1>
-        <div className="flex flex-wrap gap-4 text-sm text-gray-400">
-          <span>By <span className="font-mono text-gray-300">{shortAddr(detail.creator)}</span></span>
-          <span>Pot: <span className="text-white font-semibold">{formatUsdc(detail.pot)} USDC</span></span>
-          <span>{detail.submissionCount.toString()} entries</span>
+          </div>
+
+          <h1 className="font-display text-4xl md:text-5xl font-semibold text-text leading-[1.05] mb-3">
+            {detail.topic}
+          </h1>
+          <p className="text-text/55 text-sm">
+            Opened by <span className="font-mono text-text/70">{shortAddr(detail.creator)}</span>
+          </p>
+
+          <div className="mt-8 border border-muted/60 rounded-xl grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-muted/60">
+            <StatCell label="Pot Escrowed" value={`${formatUsdc(detail.pot)} USDC`} />
+            <StatCell label="Entries" value={detail.submissionCount.toString()} />
+            <StatCell label="Voters" value={totalVotes.toString()} />
+            <div className="px-6 py-5">
+              <PhaseTimer
+                phase={detail.phase}
+                submissionDeadline={detail.submissionDeadline}
+                votingDeadline={detail.votingDeadline}
+                finalized={detail.finalized}
+              />
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Timer */}
-      <PhaseTimer
-        phase={detail.phase}
-        submissionDeadline={detail.submissionDeadline}
-        votingDeadline={detail.votingDeadline}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Submissions */}
-        <div className="lg:col-span-2">
-          <h2 className="text-white font-bold mb-4">
-            {detail.finalized ? "Results" : "Entries"}{" "}
-            <span className="text-gray-500 font-normal text-sm">
-              ({detail.submissionCount.toString()})
+        {/* Entries */}
+        <div>
+          <div className="flex items-end justify-between mb-5">
+            <h2 className="font-display text-3xl font-semibold text-text">
+              {sealed ? "Results" : "Entries"}
+            </h2>
+            <span className="font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+              Sorted by votes
             </span>
-          </h2>
+          </div>
           <Leaderboard
             submissions={detail.submissions}
             winners={detail.winners}
             phase={detail.phase}
             pot={detail.pot}
-          />
-          <VoteReasons
-            arenaAddress={address}
-            submissions={detail.submissions}
-            submissionDeadline={detail.submissionDeadline}
-            votingDeadline={detail.votingDeadline}
+            finalized={sealed}
+            votable={phase === ArenaPhase.Voting}
+            onVote={(id) => setSelectedId(id)}
+            selectedId={selectedId}
           />
         </div>
 
-        {/* Action sidebar */}
-        <div className="space-y-4">
-          {detail.phase === ArenaPhase.Submission && (
-            <SubmitPanel arenaAddress={address} detail={detail} />
-          )}
-          {detail.phase === ArenaPhase.Voting && (
-            <VotePanel arenaAddress={address} detail={detail} />
-          )}
-          <ActionPanel arenaAddress={address} detail={detail} />
-        </div>
+        {/* Inline vote confirmation */}
+        {phase === ArenaPhase.Voting && selectedId !== null && (
+          <VoteConfirm
+            arenaAddress={address}
+            detail={detail}
+            selectedId={selectedId}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
+
+        <HowVotesCounted />
+
+        <VoteReasons
+          arenaAddress={address}
+          submissions={detail.submissions}
+          submissionDeadline={detail.submissionDeadline}
+          votingDeadline={detail.votingDeadline}
+        />
+      </div>
+
+      {/* RIGHT sidebar */}
+      <div className="space-y-6">
+        <YourPosition arenaAddress={address} detail={detail} />
+        <RulesBox detail={detail} />
+        <ContractBox address={address} />
       </div>
     </div>
   );

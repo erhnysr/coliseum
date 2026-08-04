@@ -31,9 +31,9 @@ export default function VoteReasons({
 
   if (isLoading) {
     return (
-      <div className="mt-8">
-        <h2 className="text-white font-bold mb-4">Voter Notes</h2>
-        <div className="h-16 bg-gray-800/60 rounded-xl animate-pulse" />
+      <div className="rounded-2xl border border-muted/70 bg-surface p-8">
+        <h2 className="font-display text-2xl font-semibold text-text mb-4">Voter Notes</h2>
+        <div className="h-16 bg-muted/40 rounded-xl animate-pulse" />
       </div>
     );
   }
@@ -41,12 +41,12 @@ export default function VoteReasons({
   if (withText.length === 0) return null;
 
   return (
-    <div className="mt-8">
-      <h2 className="text-white font-bold mb-1">
+    <div className="rounded-2xl border border-muted/70 bg-surface p-8">
+      <h2 className="font-display text-2xl font-semibold text-text mb-1">
         Voter Notes{" "}
-        <span className="text-gray-500 font-normal text-sm">({withText.length})</span>
+        <span className="text-text/40 font-normal text-base">({withText.length})</span>
       </h2>
-      <p className="text-gray-500 text-xs mb-4">
+      <p className="text-text/55 text-sm mb-6">
         Public reasoning attached to votes, read from on-chain event logs.
       </p>
       <div className="space-y-3">
@@ -55,18 +55,18 @@ export default function VoteReasons({
           return (
             <div
               key={`${r.voter}-${i}`}
-              className="p-4 rounded-xl border border-gray-800 bg-gray-900/50"
+              className="p-4 rounded-xl border border-muted/60 bg-bg"
             >
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1.5">
-                <span className="font-mono text-gray-400">{shortAddr(r.voter)}</span>
+              <div className="flex items-center gap-2 text-xs text-text/45 mb-1.5">
+                <span className="font-mono">{shortAddr(r.voter)}</span>
                 <span>→</span>
-                <span className="text-indigo-400 break-all">
+                <span className="text-accent break-all">
                   {target
                     ? target.contentRef
                     : `entry #${r.submissionId + 1}`}
                 </span>
               </div>
-              <p className="text-gray-200 text-sm leading-relaxed break-words">
+              <p className="text-text/80 text-sm leading-relaxed break-words">
                 {r.reason}
               </p>
             </div>

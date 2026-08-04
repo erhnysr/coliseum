@@ -2,36 +2,48 @@
 
 import { ArenaPhase, type ArenaSubmission } from "@/lib/contracts";
 import { formatUsdc } from "@/lib/usdc";
+import VerdictSeal from "@/components/ui/VerdictSeal";
 
 type Props = {
   submissions: ArenaSubmission[];
   winners: readonly [bigint, bigint, bigint]; // 1-indexed IDs, 0 = no winner
   phase: ArenaPhase;
   pot: bigint;
+  finalized: boolean;
+  /** Show per-entry Vote buttons (voting phase only). */
+  votable?: boolean;
+  onVote?: (submissionId: number) => void;
+  selectedId?: number | null;
 };
 
-const RANK_STYLE = [
-  "text-yellow-400 bg-yellow-900/20 border-yellow-800/40",
-  "text-gray-300 bg-gray-800/30 border-gray-700/40",
-  "text-amber-600 bg-amber-900/20 border-amber-800/40",
-];
-
-const SPLIT = [60, 30, 10];
+const SPLIT = [60, 30, 10]; // pot split for 1st / 2nd / 3rd (basis: /100)
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const numeral = (n: number) => ROMAN[n - 1] ?? String(n);
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export default function Leaderboard({ submissions, winners, phase, pot }: Props) {
+export default function Leaderboard({
+  submissions,
+  winners,
+  pot,
+  finalized,
+  votable = false,
+  onVote,
+  selectedId,
+}: Props) {
   if (submissions.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-600 text-sm">
+      <div className="rounded-2xl border border-muted/70 bg-surface text-center py-12 text-text/50 text-sm">
         No entries yet.
       </div>
     );
   }
 
-  // Sort by votes desc, tiebreak by index asc (matches contract logic)
+  const totalVotes = submissions.reduce((acc, s) => acc + s.votes, 0n);
+
+  // Sort by votes desc, tiebreak by original index asc (matches contract logic)
   const sorted = [...submissions]
     .map((s, i) => ({ ...s, id: i }))
     .sort((a, b) => {
@@ -40,60 +52,80 @@ export default function Leaderboard({ submissions, winners, phase, pot }: Props)
       return a.id - b.id;
     });
 
-  const isFinalized = phase === ArenaPhase.Ended && winners[0] > 0n;
+  // A verdict only exists once finalize() has been called on-chain.
+  const isSealed = finalized && winners[0] > 0n;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {sorted.map((s, rank) => {
-        const winnerSlot = isFinalized
-          ? winners.findIndex((w) => w === BigInt(s.id + 1))
-          : -1;
+        const winnerSlot = isSealed ? winners.findIndex((w) => w === BigInt(s.id + 1)) : -1;
         const isWinner = winnerSlot !== -1;
-        const prize = isWinner ? (pot * BigInt(SPLIT[winnerSlot])) / 10000n : null;
+        const prize = isWinner ? (pot * BigInt(SPLIT[winnerSlot])) / 100n : null;
+        const share =
+          totalVotes > 0n ? Math.round(Number((s.votes * 10000n) / totalVotes) / 100) : 0;
+        const isTop = rank === 0;
+        const selected = selectedId === s.id;
 
         return (
           <div
             key={s.id}
-            className={`flex items-start gap-4 p-4 rounded-xl border ${
-              isWinner ? RANK_STYLE[winnerSlot] : "border-gray-800 bg-gray-900/50"
+            className={`relative flex items-center gap-5 rounded-2xl border bg-surface px-6 py-5 transition-colors ${
+              isWinner
+                ? "border-accent-secondary/40"
+                : selected
+                  ? "border-accent"
+                  : isTop
+                    ? "border-accent/40"
+                    : "border-muted/70"
             }`}
           >
-            <div className="flex-shrink-0 w-8 text-center">
-              {isWinner ? (
-                <span className="font-black text-lg">
-                  {winnerSlot === 0 ? "🥇" : winnerSlot === 1 ? "🥈" : "🥉"}
-                </span>
-              ) : (
-                <span className="text-gray-600 text-sm font-mono">#{rank + 1}</span>
-              )}
-            </div>
+            <VerdictSeal
+              size={56}
+              variant={isWinner ? "oxblood" : "accent"}
+              className={isTop && !isWinner ? "rounded-full bg-accent-tint" : ""}
+            >
+              {numeral(rank + 1)}
+            </VerdictSeal>
 
             <div className="flex-1 min-w-0">
-              <p className="text-gray-400 text-xs font-mono mb-1">
-                {shortAddr(s.submitter)}
-              </p>
-              <p className="text-white text-sm break-all leading-relaxed">
-                {s.contentRef.startsWith("ipfs://") ? (
-                  <span className="text-indigo-400 hover:underline">
-                    {s.contentRef}
-                  </span>
-                ) : (
-                  s.contentRef
-                )}
-              </p>
-            </div>
-
-            <div className="flex-shrink-0 text-right">
-              <div className="text-white font-bold text-sm">
-                {s.votes.toString()}
-                <span className="text-gray-500 font-normal text-xs ml-1">
-                  {s.votes === 1n ? "vote" : "votes"}
+              <div className="flex items-center gap-3 mb-1.5">
+                <span className="font-mono text-xs text-text/45">{shortAddr(s.submitter)}</span>
+                <span className="font-mono text-[11px] text-accent border border-accent/40 rounded-full px-2 py-0.5">
+                  {s.votes.toString()} {s.votes === 1n ? "vote" : "votes"}
                 </span>
               </div>
-              {prize !== null && (
-                <div className="text-xs text-green-400 mt-1">
-                  +{formatUsdc(prize)} USDC
-                </div>
+              <h3 className="font-display text-lg font-semibold text-text truncate">
+                {s.contentRef || `Entry #${s.id + 1}`}
+              </h3>
+              <div className="mt-3 h-1.5 w-full rounded-full bg-muted/40 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${isTop ? "bg-accent" : "bg-text/25"}`}
+                  style={{ width: `${share}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 flex flex-col items-end gap-2 w-24">
+              <span className="font-display text-2xl font-semibold text-text tabular-nums">
+                {share}%
+              </span>
+              {votable && onVote ? (
+                <button
+                  onClick={() => onVote(s.id)}
+                  className={`text-sm font-semibold px-5 py-2 rounded-lg transition-colors ${
+                    selected
+                      ? "bg-accent-light text-surface"
+                      : "bg-accent hover:bg-accent-light text-surface"
+                  }`}
+                >
+                  Vote
+                </button>
+              ) : (
+                prize !== null && (
+                  <span className="text-sm text-accent font-medium">
+                    +{formatUsdc(prize)} USDC
+                  </span>
+                )
               )}
             </div>
           </div>

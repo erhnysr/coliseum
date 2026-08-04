@@ -22,15 +22,15 @@ export default function TxStatus({
     : null;
 
   return (
-    <div className="mt-3 rounded-xl border text-sm p-3">
+    <div className="mt-3 text-sm">
       {isPending && (
-        <div className="flex items-center gap-2 text-yellow-400 border-yellow-800/50 bg-yellow-900/20 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-accent-secondary border border-accent-secondary/30 bg-accent-secondary/5 rounded-lg p-3">
           <span className="animate-spin">⏳</span>
           <span>Waiting for wallet confirmation…</span>
         </div>
       )}
       {isConfirming && hash && (
-        <div className="flex items-center gap-2 text-blue-400 border-blue-800/50 bg-blue-900/20 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-accent border border-accent/30 bg-accent-tint rounded-lg p-3">
           <span className="animate-pulse">🔄</span>
           <span>
             Transaction submitted.{" "}
@@ -38,7 +38,7 @@ export default function TxStatus({
               href={explorerUrl!}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-blue-300"
+              className="underline hover:text-accent-light"
             >
               View on Arcscan
             </a>
@@ -46,7 +46,7 @@ export default function TxStatus({
         </div>
       )}
       {isConfirmed && hash && (
-        <div className="flex items-center gap-2 text-green-400 border-green-800/50 bg-green-900/20 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-accent border border-accent/30 bg-accent-tint rounded-lg p-3">
           <span>✅</span>
           <span>
             Confirmed.{" "}
@@ -54,7 +54,7 @@ export default function TxStatus({
               href={explorerUrl!}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-green-300"
+              className="underline hover:text-accent-light"
             >
               View on Arcscan
             </a>
@@ -62,7 +62,7 @@ export default function TxStatus({
         </div>
       )}
       {error && (
-        <div className="flex items-start gap-2 text-red-400 border-red-800/50 bg-red-900/20 rounded-lg p-3">
+        <div className="flex items-start gap-2 text-accent-secondary border border-accent-secondary/30 bg-accent-secondary/5 rounded-lg p-3">
           <span>❌</span>
           <span className="break-all">
             {error.message.includes("User rejected")
