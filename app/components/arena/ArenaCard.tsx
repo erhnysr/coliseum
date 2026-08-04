@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArenaPhase } from "@/lib/contracts";
 import { formatUsdc } from "@/lib/usdc";
 import { useCountdown } from "@/hooks/useCountdown";
+import VerdictSeal from "@/components/ui/VerdictSeal";
 import type { ArenaInfo } from "@/hooks/useArenas";
 
 // Derive phase from current time when on-chain data is stale (wagmi cache lag)
@@ -19,73 +20,94 @@ function effectivePhase(phase: ArenaPhase, subDeadline: bigint, voteDeadline: bi
 }
 
 const PHASE_LABEL: Record<ArenaPhase, string> = {
-  [ArenaPhase.Submission]: "Submissions Open",
-  [ArenaPhase.Voting]: "Voting Live",
+  [ArenaPhase.Submission]: "Submission",
+  [ArenaPhase.Voting]: "Voting",
   [ArenaPhase.Ended]: "Ended",
 };
 
-const PHASE_COLORS: Record<ArenaPhase, string> = {
-  [ArenaPhase.Submission]: "bg-emerald-900/40 text-emerald-400 border-emerald-800/50",
-  [ArenaPhase.Voting]: "bg-indigo-900/40 text-indigo-400 border-indigo-800/50",
-  [ArenaPhase.Ended]: "bg-gray-800/60 text-gray-500 border-gray-700/50",
+const PHASE_ACTION: Record<ArenaPhase, string> = {
+  [ArenaPhase.Submission]: "Submit entry",
+  [ArenaPhase.Voting]: "Cast a vote",
+  [ArenaPhase.Ended]: "View result",
 };
 
-function Countdown({ deadline, phase }: { deadline: bigint; phase: ArenaPhase }) {
-  const nextDeadline =
-    phase === ArenaPhase.Submission ? deadline : deadline; // submissionDeadline or votingDeadline passed in
-  const { label, expired } = useCountdown(nextDeadline);
-
-  if (expired) return <span className="text-gray-500 text-xs">—</span>;
-  return <span className="text-gray-300 text-xs tabular-nums">{label}</span>;
+function Countdown({ deadline }: { deadline: bigint }) {
+  const { label, expired } = useCountdown(deadline);
+  if (expired) return <span className="text-text/40">—</span>;
+  return <span className="text-text tabular-nums">{label}</span>;
 }
 
 export default function ArenaCard({ arena }: { arena: ArenaInfo }) {
   const phase = effectivePhase(arena.phase, arena.submissionDeadline, arena.votingDeadline);
   const phaseDeadline =
     phase === ArenaPhase.Submission ? arena.submissionDeadline : arena.votingDeadline;
+  // "Sealed" means finalize() was called on-chain — NOT merely past the voting deadline.
+  const sealed = arena.finalized;
+  // Voting deadline has passed but the verdict hasn't been finalized yet.
+  const endedAwaiting = phase === ArenaPhase.Ended && !arena.finalized;
+  const shortId = `ARENA-${arena.address.slice(2, 6).toUpperCase()}`;
 
   return (
     <Link
       href={`/arenas/${arena.address}`}
-      className="block bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-2xl p-5 transition-colors group"
+      className={`relative block rounded-2xl border bg-surface p-6 transition-colors hover:border-accent ${
+        sealed ? "border-accent/40" : "border-muted/70"
+      }`}
     >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <span
-          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${PHASE_COLORS[phase]}`}
-        >
-          {phase === ArenaPhase.Voting && (
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-400" />
-            </span>
-          )}
-          {PHASE_LABEL[phase]}
-        </span>
+      {sealed && (
+        <div className="absolute -top-4 -right-4 rotate-[-8deg]">
+          <VerdictSeal size={72} variant="oxblood" dashed label="Verdict" sublabel="Sealed" />
+        </div>
+      )}
 
-        <Countdown deadline={phaseDeadline} phase={phase} />
+      <div className="flex items-center justify-between mb-5">
+        <span className="font-mono text-xs uppercase tracking-[0.12em] text-text/45">
+          {shortId}
+        </span>
+        {!sealed && (
+          <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-accent border border-accent/40 rounded-full px-3 py-1">
+            {PHASE_LABEL[phase]}
+          </span>
+        )}
       </div>
 
-      <h3 className="text-white font-bold text-base leading-snug mb-4 group-hover:text-indigo-300 transition-colors line-clamp-2">
+      <h3 className="font-display text-xl font-semibold text-text leading-snug mb-6 line-clamp-2 min-h-[3.5rem]">
         {arena.topic}
       </h3>
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="border-t border-muted/60 pt-5 grid grid-cols-2 gap-4 mb-6">
         <div>
-          <div className="text-gray-500 text-xs mb-0.5">Prize pool</div>
-          <div className="text-white font-semibold">
-            {formatUsdc(arena.pot)} USDC
+          <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-text/45 mb-1.5">
+            Pot Escrowed
           </div>
+          <div className="text-lg text-text">{formatUsdc(arena.pot)} USDC</div>
         </div>
-        <div className="text-right">
-          <div className="text-gray-500 text-xs mb-0.5">Entries</div>
-          <div className="text-white font-semibold">
-            {arena.submissionCount.toString()}
+        <div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-text/45 mb-1.5">
+            Entries
           </div>
+          <div className="text-lg text-text">{arena.submissionCount.toString()}</div>
         </div>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-800">
-        <p className="text-gray-600 text-xs font-mono truncate">{arena.address}</p>
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-text/45">
+          {sealed ? (
+            "Verdict Sealed"
+          ) : endedAwaiting ? (
+            "Ended · Awaiting Finalization"
+          ) : (
+            <>
+              On-chain Deadline{" "}
+              <span className="normal-case tracking-normal text-text/70">
+                · <Countdown deadline={phaseDeadline} />
+              </span>
+            </>
+          )}
+        </div>
+        <span className="border border-muted text-text font-semibold text-sm px-4 py-2 rounded-lg whitespace-nowrap">
+          {PHASE_ACTION[phase]}
+        </span>
       </div>
     </Link>
   );
