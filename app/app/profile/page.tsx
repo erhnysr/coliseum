@@ -3,186 +3,164 @@
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useProfile } from "@/hooks/useProfile";
-import { ArenaPhase } from "@/lib/contracts";
-import { formatUsdc } from "@/lib/usdc";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import type { ProfileArena } from "@/hooks/useProfile";
+import VerdictSeal from "@/components/ui/VerdictSeal";
 
-const RANK_EMOJI = ["🥇", "🥈", "🥉"];
-const RANK_COLOR = [
-  "text-yellow-400 bg-yellow-900/20 border-yellow-800/40",
-  "text-gray-300 bg-gray-800/30 border-gray-700/40",
-  "text-amber-600 bg-amber-900/20 border-amber-800/40",
-];
-
-const PHASE_LABEL: Record<ArenaPhase, string> = {
-  [ArenaPhase.Submission]: "Submissions",
-  [ArenaPhase.Voting]: "Voting",
-  [ArenaPhase.Ended]: "Ended",
-};
-const PHASE_DOT: Record<ArenaPhase, string> = {
-  [ArenaPhase.Submission]: "bg-emerald-400",
-  [ArenaPhase.Voting]: "bg-indigo-400",
-  [ArenaPhase.Ended]: "bg-gray-600",
-};
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const numeral = (n: number) => ROMAN[n - 1] ?? String(n);
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function ArenaRow({ arena }: { arena: ProfileArena }) {
+function StatCell({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value: string | number;
+  className?: string;
+}) {
   return (
-    <Link
-      href={`/arenas/${arena.address}`}
-      className="flex items-center justify-between gap-4 p-4 bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-2xl transition-colors group"
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="relative flex h-2 w-2 flex-shrink-0">
-          <span className={`relative inline-flex rounded-full h-2 w-2 ${PHASE_DOT[arena.phase]}`} />
-        </span>
-        <div className="min-w-0">
-          <p className="text-white font-medium text-sm truncate group-hover:text-indigo-300 transition-colors">
-            {arena.topic}
-          </p>
-          <p className="text-gray-600 text-xs font-mono">{shortAddr(arena.address)}</p>
-        </div>
-      </div>
-      <div className="flex-shrink-0 text-right">
-        <p className="text-gray-400 text-xs">{PHASE_LABEL[arena.phase]}</p>
-        <p className="text-white text-sm font-semibold">{formatUsdc(arena.pot)} USDC</p>
-      </div>
-    </Link>
+    <div className={`px-5 py-4 ${className}`}>
+      <div className="font-mono text-xs uppercase tracking-[0.15em] text-text/45 mb-2">{label}</div>
+      <div className="text-2xl font-medium text-text tabular-nums">{value}</div>
+    </div>
   );
 }
 
 export default function ProfilePage() {
   const { address, isConnected } = useAccount();
-  const { createdArenas, submittedArenas, winRecords, isLoading } = useProfile(address);
+  const { createdArenas, winRecords, isLoading } = useProfile(address);
 
   if (!isConnected) {
     return (
-      <div className="max-w-md mx-auto px-4 py-24 text-center flex flex-col items-center gap-6">
-        <p className="text-gray-400 text-lg">Connect your wallet to view your profile.</p>
+      <div className="max-w-md mx-auto px-6 py-24 text-center flex flex-col items-center gap-6">
+        <VerdictSeal size={96} dashed dot dotVariant="oxblood" />
+        <p className="text-text/70 text-lg">Connect your wallet to view your soulbound record.</p>
         <ConnectButton />
       </div>
     );
   }
 
-  const hasActivity = createdArenas.length > 0 || submittedArenas.length > 0 || winRecords.length > 0;
+  const verdictsWon = winRecords.length;
+  const sortedWins = [...winRecords].sort((a, b) => Number(b.timestamp - a.timestamp));
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-10">
-        <div>
-          <h1 className="text-3xl font-black text-white mb-1">Profile</h1>
-          <p className="text-gray-500 text-sm font-mono">{address}</p>
-        </div>
-        <div className="flex gap-3 text-center">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-3">
-            <div className="text-2xl font-black text-white">{createdArenas.length}</div>
-            <div className="text-gray-500 text-xs mt-0.5">Created</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-3">
-            <div className="text-2xl font-black text-white">{submittedArenas.length}</div>
-            <div className="text-gray-500 text-xs mt-0.5">Entered</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-3">
-            <div className="text-2xl font-black text-white">{winRecords.length}</div>
-            <div className="text-gray-500 text-xs mt-0.5">Wins</div>
-          </div>
-        </div>
-      </div>
+    <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
+      {/* ── Soulbound Record ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8 md:p-10">
+        <div className="grid lg:grid-cols-[1fr_auto] gap-10 items-center">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent mb-4">
+              Soulbound Record
+            </p>
+            <h1 className="font-mono text-3xl md:text-4xl font-bold text-text break-all leading-tight mb-4">
+              {address}
+            </h1>
+            <p className="text-text/60 text-sm leading-relaxed max-w-md mb-8">
+              Minted on first sealed verdict. Non-transferable — this record follows the address, not
+              the wallet holder.
+            </p>
 
-      {isLoading ? (
-        <div className="space-y-4 animate-pulse">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-20 bg-gray-900 rounded-2xl border border-gray-800" />
-          ))}
-        </div>
-      ) : !hasActivity ? (
-        <div className="text-center py-20 bg-gray-900/40 border border-gray-800 rounded-2xl">
-          <p className="text-gray-400 text-base mb-2">You haven&apos;t created or submitted to any arenas yet.</p>
-          <Link href="/arenas" className="text-indigo-400 hover:text-indigo-300 text-sm transition-colors">
-            Browse arenas to get started →
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-10">
-          {/* Win Records */}
-          {winRecords.length > 0 && (
-            <section>
-              <h2 className="text-white font-bold text-lg mb-4">
-                Reputation Badges
-                <span className="text-gray-500 font-normal text-sm ml-2">({winRecords.length})</span>
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[...winRecords]
-                  .sort((a, b) => a.rank - b.rank)
-                  .map((rec, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-center gap-4 p-4 rounded-xl border ${RANK_COLOR[rec.rank - 1]}`}
-                    >
-                      <span className="text-3xl">{RANK_EMOJI[rec.rank - 1]}</span>
-                      <div className="min-w-0">
-                        <p className="text-white font-semibold text-sm truncate">{rec.category}</p>
-                        <Link
-                          href={`/arenas/${rec.arena}`}
-                          className="text-xs font-mono text-gray-400 hover:text-white transition-colors"
-                        >
-                          {shortAddr(rec.arena)}
-                        </Link>
-                        <p className="text-gray-600 text-xs mt-0.5">
-                          {new Date(Number(rec.timestamp) * 1000).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </section>
-          )}
-
-          {/* Created Arenas */}
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white font-bold text-lg">
-                Created Arenas
-                <span className="text-gray-500 font-normal text-sm ml-2">({createdArenas.length})</span>
-              </h2>
-              <Link href="/create" className="text-indigo-400 hover:text-indigo-300 text-sm transition-colors">
-                + New Arena
-              </Link>
+            <div className="border border-muted/60 rounded-xl overflow-hidden grid grid-cols-3 max-w-xl">
+              <StatCell
+                label="Verdicts Won"
+                value={isLoading ? "…" : verdictsWon}
+                className="border-r border-b border-muted/50"
+              />
+              <StatCell
+                label="Arenas Created"
+                value={isLoading ? "…" : createdArenas.length}
+                className="border-r border-b border-muted/50"
+              />
+              <StatCell label="Entries" value="—" className="border-b border-muted/50" />
+              <StatCell label="Votes Cast" value="—" className="border-r border-muted/50" />
+              <div className="col-span-2 bg-muted/25" />
             </div>
+          </div>
 
-            {createdArenas.length === 0 ? (
-              <div className="text-center py-10 bg-gray-900/40 border border-gray-800 rounded-2xl">
-                <p className="text-gray-600 text-sm mb-3">You haven&apos;t created any arenas yet.</p>
-                <Link href="/create" className="text-indigo-400 hover:text-indigo-300 text-sm underline">
-                  Create your first arena →
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {createdArenas.map((arena) => <ArenaRow key={arena.address} arena={arena} />)}
-              </div>
-            )}
-          </section>
-
-          {/* Submitted Entries */}
-          {submittedArenas.length > 0 && (
-            <section>
-              <h2 className="text-white font-bold text-lg mb-4">
-                Entered Arenas
-                <span className="text-gray-500 font-normal text-sm ml-2">({submittedArenas.length})</span>
-              </h2>
-              <div className="space-y-3">
-                {submittedArenas.map((arena) => <ArenaRow key={arena.address} arena={arena} />)}
-              </div>
-            </section>
-          )}
+          <div className="flex justify-center lg:justify-end">
+            <VerdictSeal size={240} dashed label="Soulbound" sublabel="Verdicts">
+              {isLoading ? "…" : verdictsWon || "—"}
+            </VerdictSeal>
+          </div>
         </div>
-      )}
+      </section>
+
+      {/* ── How voting works ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8 md:p-10">
+        <h2 className="font-display text-2xl font-semibold text-text mb-3">How voting works</h2>
+        <p className="text-text/65 text-sm leading-relaxed max-w-xl mb-6">
+          Every vote costs a fixed stake and carries a written reason. Both are permanent, and both
+          are attributable to this address.
+        </p>
+        <div className="rounded-xl bg-bg border border-muted/60 px-5 py-4 font-mono text-sm">
+          <span className="text-text">vote = </span>
+          <span className="text-accent">VOTE_STAKE</span>
+          <span className="text-text"> + </span>
+          <span className="text-accent-secondary">public reason</span>
+        </div>
+      </section>
+
+      {/* ── Seals earned ── */}
+      <section>
+        <div className="flex items-end justify-between mb-6">
+          <h2 className="font-display text-3xl font-semibold text-text">Seals earned</h2>
+          <span className="font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+            Each win stamps the record
+          </span>
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-56 rounded-2xl border border-muted/70 bg-surface animate-pulse" />
+            ))}
+          </div>
+        ) : sortedWins.length === 0 ? (
+          <div className="rounded-2xl border border-muted/70 bg-surface text-center py-16 px-6">
+            <p className="text-text/60 text-base mb-3">No seals yet.</p>
+            <Link href="/arenas" className="text-accent hover:text-accent-light text-sm transition-colors">
+              Browse arenas to win your first verdict →
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {sortedWins.map((rec, i) => (
+              <Link
+                key={`${rec.arena}-${i}`}
+                href={`/arenas/${rec.arena}`}
+                className="block rounded-2xl border border-muted/70 bg-surface p-6 transition-colors hover:border-accent"
+              >
+                <div className="mb-4">
+                  <VerdictSeal size={56} variant="oxblood" dashed label="Verdict">
+                    {numeral(verdictsWon - i)}
+                  </VerdictSeal>
+                </div>
+                <h3 className="font-display text-lg font-semibold text-text leading-snug mb-6 min-h-[3.5rem]">
+                  {rec.category}
+                </h3>
+                <div className="border-t border-muted/60 pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text/45">
+                      Arena Pot
+                    </span>
+                    <span className="font-mono text-sm text-text">— USDC</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text/45">
+                      Arena
+                    </span>
+                    <span className="font-mono text-sm text-text">{shortAddr(rec.arena)}</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
