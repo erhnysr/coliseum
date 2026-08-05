@@ -4,9 +4,15 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEventLogs } from "viem";
-import { ARENA_FACTORY_ADDRESS, ARENA_FACTORY_ABI, ERC20_APPROVE_ABI } from "@/lib/contracts";
-import { USDC_ADDRESS, parseUsdc, SUBMISSION_FEE } from "@/lib/usdc";
+import {
+  ARENA_FACTORY_ADDRESS,
+  ARENA_FACTORY_ABI,
+  ERC20_APPROVE_ABI,
+  MAX_VOTE_REASON,
+} from "@/lib/contracts";
+import { USDC_ADDRESS, parseUsdc, formatUsdc, SUBMISSION_FEE, VOTE_STAKE } from "@/lib/usdc";
 import TxStatus from "@/components/ui/TxStatus";
+import VerdictSeal from "@/components/ui/VerdictSeal";
 
 function toDatetimeLocal(offsetHours: number) {
   const d = new Date(Date.now() + offsetHours * 3600 * 1000);
@@ -15,6 +21,19 @@ function toDatetimeLocal(offsetHours: number) {
 
 function toUnixSeconds(datetimeLocal: string): bigint {
   return BigInt(Math.floor(new Date(datetimeLocal).getTime() / 1000));
+}
+
+// Present a datetime-local string as a human-readable deadline.
+function fmtDeadline(datetimeLocal: string): string {
+  if (!datetimeLocal) return "—";
+  const d = new Date(datetimeLocal);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 type FormState = {
@@ -39,6 +58,12 @@ export default function CreateArenaForm() {
   const [errors, setErrors] = useState<FieldError>({});
   const [step, setStep] = useState<"form" | "approve" | "create" | "done">("form");
 
+  // Presentation-only: day-based windows drive the datetime-local strings above,
+  // and an off-chain judging brief (no contract field — not persisted on-chain).
+  const [subDays, setSubDays] = useState(1);
+  const [voteDays, setVoteDays] = useState(1);
+  const [brief, setBrief] = useState("");
+
   const prizePoolUsdc = parseUsdc(form.prizePool || "0");
   const needsApprove = prizePoolUsdc > 0n;
 
@@ -48,7 +73,6 @@ export default function CreateArenaForm() {
     data: approveTxHash,
     isPending: approvePending,
     error: approveError,
-    reset: resetApprove,
   } = useWriteContract();
 
   const { isLoading: approveConfirming, isSuccess: approveConfirmed } =
@@ -60,7 +84,6 @@ export default function CreateArenaForm() {
     data: createTxHash,
     isPending: createPending,
     error: createError,
-    reset: resetCreate,
   } = useWriteContract();
 
   const {
@@ -167,38 +190,93 @@ export default function CreateArenaForm() {
     };
   }
 
+  // Day-based windows → recompute the datetime-local deadlines (form shape unchanged).
+  function daysFromNow(days: number) {
+    return new Date(Date.now() + days * 86400 * 1000).toISOString().slice(0, 16);
+  }
+  function updateSubDays(days: number) {
+    const d = Math.max(1, days || 1);
+    setSubDays(d);
+    setForm((f) => ({
+      ...f,
+      subDeadline: daysFromNow(d),
+      voteDeadline: daysFromNow(d + voteDays),
+    }));
+    setErrors((err) => ({ ...err, subDeadline: undefined, voteDeadline: undefined }));
+  }
+  function updateVoteDays(days: number) {
+    const d = Math.max(1, days || 1);
+    setVoteDays(d);
+    setForm((f) => ({ ...f, voteDeadline: daysFromNow(subDays + d) }));
+    setErrors((err) => ({ ...err, voteDeadline: undefined }));
+  }
+
   const factoryReady = ARENA_FACTORY_ADDRESS.length > 2;
   const txError = approveError ?? createError;
   const anyPending = approvePending || approveConfirming || createPending || createConfirming;
 
+  const inputBase =
+    "w-full bg-bg border text-text text-sm rounded-xl px-4 py-3 placeholder-text/40 focus:outline-none transition-colors";
+  const inputOk = "border-muted focus:border-accent";
+  const inputErr = "border-accent-secondary focus:border-accent-secondary";
+
+  const fixedRows = [
+    { label: "Submission fee", value: `${formatUsdc(SUBMISSION_FEE)} USDC` },
+    { label: "Vote stake", value: `${formatUsdc(VOTE_STAKE)} USDC` },
+    { label: "Reason length limit", value: `${MAX_VOTE_REASON} chars` },
+    { label: "Vote tally", value: "One per address · unweighted" },
+  ];
+
+  const summaryRows = [
+    { label: "Prize pool", value: `${form.prizePool || "0"} USDC` },
+    { label: "Submission deadline", value: fmtDeadline(form.subDeadline) },
+    { label: "Voting deadline", value: fmtDeadline(form.voteDeadline) },
+    { label: "Settlement asset", value: "USDC" },
+    { label: "Reputation token", value: "ReputationNFT · ERC-5192" },
+  ];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Topic */}
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Contest topic <span className="text-red-400">*</span>
+      {/* ── The Question ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8">
+        <h2 className="font-display text-2xl font-semibold text-text mb-1">The Question</h2>
+        <p className="text-text/55 text-sm mb-6">What is the arena judging?</p>
+
+        <label className="block text-sm font-medium text-text/80 mb-2">
+          Title <span className="text-accent-secondary">*</span>
         </label>
         <input
           type="text"
           value={form.topic}
           onChange={set("topic")}
-          placeholder="Best meme of the week, funniest caption, etc."
+          placeholder="Best onboarding flow for a first-time Arc wallet"
           maxLength={120}
-          className={`w-full bg-gray-900 border text-white text-sm rounded-xl px-4 py-3 placeholder-gray-600 focus:outline-none focus:ring-1 transition-colors ${
-            errors.topic ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-indigo-500 focus:border-indigo-500"
-          }`}
+          className={`${inputBase} ${errors.topic ? inputErr : inputOk}`}
         />
-        <div className="flex justify-between mt-1">
-          {errors.topic && <p className="text-red-400 text-xs">{errors.topic}</p>}
-          <p className="text-gray-600 text-xs ml-auto">{form.topic.length}/120</p>
+        <div className="flex justify-between mt-1 mb-6">
+          {errors.topic && <p className="text-accent-secondary text-xs">{errors.topic}</p>}
+          <p className="text-text/40 text-xs ml-auto">{form.topic.length}/120</p>
         </div>
-      </div>
 
-      {/* Prize pool */}
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Initial prize pool (USDC)
-        </label>
+        <label className="block text-sm font-medium text-text/80 mb-2">Judging brief</label>
+        <textarea
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          rows={3}
+          placeholder="How should voters judge entries? e.g. clarity, time-to-first-transaction, handling a user who has never held USDC."
+          className={`${inputBase} ${inputOk} resize-none`}
+        />
+        <p className="text-text/40 text-xs mt-1">
+          Optional context for voters. Not stored on-chain in this version.
+        </p>
+      </section>
+
+      {/* ── Prize Pool ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8">
+        <h2 className="font-display text-2xl font-semibold text-text mb-1">Prize Pool</h2>
+        <p className="text-text/55 text-sm mb-6">
+          Seed the pot. Submission fees are added to it automatically.
+        </p>
         <div className="relative">
           <input
             type="number"
@@ -207,121 +285,162 @@ export default function CreateArenaForm() {
             min="0"
             step="0.01"
             placeholder="0.00"
-            className={`w-full bg-gray-900 border text-white text-sm rounded-xl px-4 py-3 pr-16 placeholder-gray-600 focus:outline-none focus:ring-1 transition-colors ${
-              errors.prizePool ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-indigo-500 focus:border-indigo-500"
-            }`}
+            className={`${inputBase} pr-16 ${errors.prizePool ? inputErr : inputOk}`}
           />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">USDC</span>
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-text/45 text-sm">
+            USDC
+          </span>
         </div>
-        {errors.prizePool && <p className="text-red-400 text-xs mt-1">{errors.prizePool}</p>}
-        <p className="text-gray-600 text-xs mt-1">
-          Submission fees (0.10 USDC each) are added to the pot automatically.
+        {errors.prizePool && <p className="text-accent-secondary text-xs mt-1">{errors.prizePool}</p>}
+      </section>
+
+      {/* ── Windows ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8">
+        <h2 className="font-display text-2xl font-semibold text-text mb-1">Windows</h2>
+        <p className="text-text/55 text-sm mb-6">
+          How long each round stays open. Voting begins when submissions close.
         </p>
-      </div>
-
-      {/* Deadlines */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Submission deadline <span className="text-red-400">*</span>
-          </label>
-          <input
-            type="datetime-local"
-            value={form.subDeadline}
-            onChange={set("subDeadline")}
-            className={`w-full bg-gray-900 border text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 transition-colors ${
-              errors.subDeadline ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-indigo-500 focus:border-indigo-500"
-            }`}
-          />
-          {errors.subDeadline && <p className="text-red-400 text-xs mt-1">{errors.subDeadline}</p>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Voting deadline <span className="text-red-400">*</span>
-          </label>
-          <input
-            type="datetime-local"
-            value={form.voteDeadline}
-            onChange={set("voteDeadline")}
-            className={`w-full bg-gray-900 border text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 transition-colors ${
-              errors.voteDeadline ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-indigo-500 focus:border-indigo-500"
-            }`}
-          />
-          {errors.voteDeadline && <p className="text-red-400 text-xs mt-1">{errors.voteDeadline}</p>}
-        </div>
-      </div>
-
-      {/* Summary card */}
-      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 text-sm space-y-2">
-        <div className="flex justify-between text-gray-400">
-          <span>Initial prize pool</span>
-          <span className="text-white">{form.prizePool || "0"} USDC</span>
-        </div>
-        <div className="flex justify-between text-gray-400">
-          <span>Submission fee</span>
-          <span className="text-white">0.10 USDC / entry</span>
-        </div>
-        <div className="flex justify-between text-gray-400">
-          <span>Vote stake</span>
-          <span className="text-white">0.05 USDC / vote</span>
-        </div>
-        <div className="flex justify-between text-gray-400 pt-2 border-t border-gray-800">
-          <span>Prize split</span>
-          <span className="text-white">60% / 30% / 10%</span>
-        </div>
-      </div>
-
-      {/* CTA */}
-      {!isConnected ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500 text-sm">Connect your wallet to create an arena.</p>
-        </div>
-      ) : !factoryReady ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500 text-sm">Contract not yet deployed to Arc Testnet.</p>
-        </div>
-      ) : step === "done" ? (
-        <div className="bg-green-900/30 border border-green-800/50 rounded-xl p-4 text-center">
-          <p className="text-green-400 font-semibold">Arena created! Redirecting…</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {/* Step indicator when multi-step */}
-          {needsApprove && (step === "approve" || step === "create") && (
-            <div className="flex items-center gap-3 text-xs text-gray-500">
-              <span className={step === "approve" ? "text-yellow-400 font-semibold" : "text-green-400"}>
-                {approveConfirmed ? "✓" : "1."} Approve USDC
-              </span>
-              <span className="text-gray-700">→</span>
-              <span className={step === "create" ? "text-indigo-400 font-semibold" : ""}>
-                2. Create Arena
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-text/80 mb-2">Submissions open for</label>
+            <div className="relative">
+              <input
+                type="number"
+                min="1"
+                value={subDays}
+                onChange={(e) => updateSubDays(Number(e.target.value))}
+                className={`${inputBase} pr-16 ${errors.subDeadline ? inputErr : inputOk}`}
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-text/45 text-sm">
+                days
               </span>
             </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={anyPending || !address || step === "approve" || step === "create"}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl text-sm transition-colors"
-          >
-            {anyPending
-              ? step === "approve"
-                ? "Approving USDC…"
-                : "Creating Arena…"
-              : needsApprove
-              ? "Approve & Create Arena"
-              : "Create Arena"}
-          </button>
-
-          <TxStatus
-            hash={approveTxHash ?? createTxHash}
-            isPending={approvePending || createPending}
-            isConfirming={approveConfirming || createConfirming}
-            isConfirmed={createConfirmed}
-            error={txError}
-          />
+            {errors.subDeadline && (
+              <p className="text-accent-secondary text-xs mt-1">{errors.subDeadline}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text/80 mb-2">Voting open for</label>
+            <div className="relative">
+              <input
+                type="number"
+                min="1"
+                value={voteDays}
+                onChange={(e) => updateVoteDays(Number(e.target.value))}
+                className={`${inputBase} pr-16 ${errors.voteDeadline ? inputErr : inputOk}`}
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-text/45 text-sm">
+                days
+              </span>
+            </div>
+            {errors.voteDeadline && (
+              <p className="text-accent-secondary text-xs mt-1">{errors.voteDeadline}</p>
+            )}
+          </div>
         </div>
-      )}
+      </section>
+
+      {/* ── Fixed by the Contract ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8">
+        <h2 className="font-display text-2xl font-semibold text-text mb-1">Fixed by the Contract</h2>
+        <p className="text-text/55 text-sm mb-6">
+          These are enforced on-chain and cannot be set per-arena.
+        </p>
+        <div className="border border-muted/60 rounded-xl divide-y divide-muted/50">
+          {fixedRows.map((r) => (
+            <div key={r.label} className="flex items-center justify-between px-5 py-3.5">
+              <span className="text-text/70 text-sm">{r.label}</span>
+              <span className="font-mono text-sm text-text tabular-nums">{r.value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Deploy Summary ── */}
+      <section className="rounded-2xl border border-muted/70 bg-surface p-8">
+        <div className="flex items-start gap-6 mb-8">
+          <VerdictSeal size={80} dashed label="Round" sublabel="of IV">
+            I
+          </VerdictSeal>
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-text mb-1">Deploy Summary</h2>
+            <p className="text-text/55 text-sm">
+              {form.topic.trim() || "Your arena topic will appear here."}
+            </p>
+          </div>
+        </div>
+
+        <div className="border border-muted/60 rounded-xl divide-y divide-muted/50 mb-6">
+          {summaryRows.map((r) => (
+            <div key={r.label} className="flex items-center justify-between px-5 py-3.5">
+              <span className="text-text/70 text-sm">{r.label}</span>
+              <span className="font-mono text-sm text-text tabular-nums">{r.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA — write flow unchanged */}
+        {!isConnected ? (
+          <div className="text-center border border-muted/70 rounded-xl py-3.5 font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+            Connect your wallet to deploy
+          </div>
+        ) : !factoryReady ? (
+          <div className="text-center border border-muted/70 rounded-xl py-3.5 font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+            Contract not yet deployed to Arc Testnet
+          </div>
+        ) : step === "done" ? (
+          <div className="bg-accent-tint border border-accent/40 rounded-xl p-4 text-center">
+            <p className="text-accent font-semibold">Arena created! Redirecting…</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {needsApprove && (step === "approve" || step === "create") && (
+              <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-[0.12em] text-text/45">
+                <span className={step === "approve" ? "text-accent-secondary font-semibold" : "text-accent"}>
+                  {approveConfirmed ? "✓" : "1."} Approve USDC
+                </span>
+                <span className="text-muted">→</span>
+                <span className={step === "create" ? "text-accent font-semibold" : ""}>
+                  2. Deploy Arena
+                </span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={anyPending || !address || step === "approve" || step === "create"}
+              className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 disabled:cursor-not-allowed text-surface font-semibold py-3.5 rounded-xl text-sm transition-colors"
+            >
+              {anyPending
+                ? step === "approve"
+                  ? "Approving USDC…"
+                  : "Deploying arena…"
+                : needsApprove
+                  ? "Approve & deploy arena"
+                  : "Deploy arena"}
+            </button>
+
+            <TxStatus
+              hash={approveTxHash ?? createTxHash}
+              isPending={approvePending || createPending}
+              isConfirming={approveConfirming || createConfirming}
+              isConfirmed={createConfirmed}
+              error={txError}
+            />
+          </div>
+        )}
+      </section>
+
+      {/* ── Immutable warning ── */}
+      <section className="rounded-2xl border border-accent-secondary/40 bg-accent-secondary/5 p-6">
+        <h3 className="font-display text-lg font-semibold text-accent-secondary mb-2">
+          Immutable at deploy
+        </h3>
+        <p className="text-text/70 text-sm leading-relaxed">
+          The topic, prize pool and both deadlines are written into the arena contract at deploy and
+          cannot be edited afterward. Review the summary above before you deploy.
+        </p>
+      </section>
     </form>
   );
 }

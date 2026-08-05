@@ -9,16 +9,16 @@ type Filter = "all" | "active" | "ended";
 
 function SkeletonCard() {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 animate-pulse">
-      <div className="flex items-start justify-between mb-3">
-        <div className="h-6 w-28 bg-gray-800 rounded-full" />
-        <div className="h-4 w-12 bg-gray-800 rounded" />
+    <div className="bg-surface border border-muted/70 rounded-2xl p-6 animate-pulse">
+      <div className="flex items-start justify-between mb-5">
+        <div className="h-4 w-24 bg-muted/50 rounded" />
+        <div className="h-6 w-20 bg-muted/50 rounded-full" />
       </div>
-      <div className="h-5 w-3/4 bg-gray-800 rounded mb-2" />
-      <div className="h-4 w-1/2 bg-gray-800 rounded mb-6" />
+      <div className="h-5 w-3/4 bg-muted/50 rounded mb-2" />
+      <div className="h-5 w-1/2 bg-muted/50 rounded mb-8" />
       <div className="flex justify-between">
-        <div className="h-8 w-24 bg-gray-800 rounded" />
-        <div className="h-8 w-16 bg-gray-800 rounded" />
+        <div className="h-8 w-24 bg-muted/50 rounded" />
+        <div className="h-8 w-16 bg-muted/50 rounded" />
       </div>
     </div>
   );
@@ -44,7 +44,7 @@ export default function ArenaList() {
   if (error) {
     return (
       <div className="text-center py-20">
-        <p className="text-red-400 text-sm font-mono">Error: {error.message}</p>
+        <p className="text-accent-secondary text-sm font-mono">Error: {error.message}</p>
       </div>
     );
   }
@@ -52,7 +52,7 @@ export default function ArenaList() {
   if (!factoryReady) {
     return (
       <div className="text-center py-20">
-        <p className="text-gray-600 text-sm">
+        <p className="text-text/50 text-sm">
           Contract not deployed yet. Deploy to Arc Testnet to see arenas.
         </p>
       </div>
@@ -69,8 +69,8 @@ export default function ArenaList() {
             onClick={() => setFilter(f)}
             className={`text-sm font-medium px-4 py-2 rounded-xl border transition-colors capitalize ${
               filter === f
-                ? "bg-indigo-600 border-indigo-600 text-white"
-                : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white hover:border-gray-600"
+                ? "bg-accent border-accent text-surface"
+                : "bg-surface border-muted/70 text-text/60 hover:text-accent hover:border-accent"
             }`}
           >
             {f}
@@ -84,7 +84,7 @@ export default function ArenaList() {
         </div>
       ) : sorted.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-gray-600 text-sm">
+          <p className="text-text/50 text-sm">
             {filter === "all" ? "No arenas yet." : `No ${filter} arenas.`}
           </p>
         </div>

@@ -12,21 +12,22 @@ export default async function ArenaDetailPage({
   // Basic address validation before passing to client component
   const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(id);
 
+  const shortId = isValidAddress ? `ARENA-${id.slice(2, 6).toUpperCase()}` : id;
+
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      <div className="mb-6">
-        <Link
-          href="/arenas"
-          className="text-gray-500 hover:text-gray-300 text-sm transition-colors"
-        >
-          ← Back to Arenas
+    <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="mb-6 font-mono text-xs uppercase tracking-[0.15em] text-text/45">
+        <Link href="/arenas" className="hover:text-accent transition-colors">
+          Arenas
         </Link>
+        <span className="mx-2">/</span>
+        <span className="text-text/70">{shortId}</span>
       </div>
 
       {isValidAddress ? (
         <ArenaDetail address={id as `0x${string}`} />
       ) : (
-        <p className="text-red-400 text-sm">
+        <p className="text-accent-secondary text-sm">
           Invalid arena address: <code>{id}</code>
         </p>
       )}
