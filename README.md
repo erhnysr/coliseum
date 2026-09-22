@@ -1,5 +1,11 @@
 # Coliseum
 
+> **⚠️ This repository has moved.** Coliseum's contracts and frontend have been
+> consolidated into the [Portage monorepo](https://github.com/erhnysr/portage) —
+> see `contracts/arena/` (contracts) and `apps/arena/` (frontend). This repo is
+> archived and no longer maintained; please use the new location for the latest
+> code, issues, and pull requests.
+
 ## Live Demo
 
 **https://coliseum-arc.vercel.app**
